@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌊 Smart Flood Alert Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
+    <style>
+        :root {
+            --primary-bg: #1a1e2e;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --accent-color: #00d4ff;
+            --text-color: #e0e0e0;
+            --alert-low: #ffeb3b;
+            --alert-medium: #ff9800;
+            --alert-high: #ff4c4c;
+            --success-color: #4caf50;
+            --nav-bg: #111422;
+            --chatbot-bg: #2b2f42; /* Darker background for chatbot messages */
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--primary-bg), #2c344b);
+            color: var(--text-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+        }
+
+        #left-navigation {
+            width: 250px;
+            background: var(--nav-bg);
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        #left-navigation h3 {
+            color: #ffffff;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        #left-navigation .nav-item {
+            margin-bottom: 15px;
+        }
+
+        #left-navigation .nav-link {
+            color: var(--text-color);
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            transition: background 0.3s ease, color 0.3s ease;
+            display: block;
+            font-weight: 500;
+        }
+
+        #left-navigation .nav-link:hover {
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--accent-color);
+        }
+
+        #main-content {
+            margin-left: 250px;
+            flex-grow: 1;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+
+        h1, h4, h5 {
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 1400px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(8px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+
+        .value.updated {
+            color: #ffeb3b;
+            transform: scale(1.1);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            padding: 15px;
+        }
+
+        #alertMessage {
+            font-size: 1.25rem;
+            font-weight: 500;
+            padding: 15px;
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+
+        .btn-custom {
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+
+        .btn-custom:hover {
+            background: #00aaff;
+            transform: translateY(-2px);
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-label {
+            font-size: 1rem;
+            color: #a0a0a0;
+            margin-bottom: 5px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-color);
+        }
+
+        .slider-value {
+            font-size: 1rem;
+            color: var(--accent-color);
+            margin-left: 10px;
+        }
+
+        .table-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        footer {
+            margin-top: 30px;
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            text-align: center;
+        }
+
+        /* Chatbot styles */
+        #chatbot-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            height: 450px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1000;
+            transform: scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+
+        #chatbot-container.open {
+            transform: scale(1);
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #chatbot-header {
+            background: var(--accent-color);
+            color: #fff;
+            padding: 15px;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        #chatbot-close-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        #chatbot-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chatbot-message {
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 85%; /* Increased max-width */
+            word-wrap: break-word; /* Ensure long words break */
+        }
+
+        .chatbot-message.user {
+            align-self: flex-end;
+            background: var(--accent-color);
+            color: #fff;
+            border-bottom-right-radius: 2px; /* Slight design tweak */
+        }
+
+        .chatbot-message.bot {
+            align-self: flex-start;
+            background: var(--chatbot-bg); /* Use new chatbot background variable */
+            color: var(--text-color);
+            border-bottom-left-radius: 2px; /* Slight design tweak */
+        }
+
+        .chatbot-message.typing {
+            background: #4a4f66; /* Different background for typing indicator */
+            font-style: italic;
+            color: #bbb;
+        }
+
+        #chatbot-input-container {
+            display: flex;
+            padding: 10px 15px;
+            align-items: center; /* Vertically align items */
+        }
+
+        #chatbot-input {
+            flex-grow: 1;
+            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-color);
+            outline: none; /* Remove default focus outline */
+        }
+
+        #chatbot-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 0.2rem rgba(0, 212, 255, 0.25); /* Focus glow */
+        }
+
+        #chatbot-send-btn {
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 15px;
+            margin-left: 10px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        #chatbot-send-btn:hover {
+            background: #00aaff;
+            transform: translateY(-1px);
+        }
+
+        #chatbot-toggle-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+            transition: transform 0.2s ease;
+        }
+
+        #chatbot-toggle-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            justify-content: center; /* Center quick action buttons */
+        }
+
+        .quick-action-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-color);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .quick-action-btn:hover {
+            background: var(--accent-color);
+            color: #fff;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            #left-navigation {
+                width: 200px;
+                padding: 15px;
+            }
+            #main-content {
+                margin-left: 200px;
+                width: calc(100% - 200px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            #left-navigation {
+                position: static;
+                width: 100%;
+                height: auto;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+                padding-bottom: 0;
+            }
+            #left-navigation h3 {
+                margin-bottom: 15px;
+            }
+            #left-navigation .nav-list {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+            }
+            #left-navigation .nav-item {
+                margin-bottom: 0;
+            }
+            #left-navigation .nav-link {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            #main-content {
+                margin-left: 0;
+                width: 100%;
+                padding-top: 20px;
+            }
+            .value {
+                font-size: 1.8rem;
+            }
+            .chart-container {
+                height: 250px;
+            }
+            #chatbot-container {
+                width: 90%;
+                right: 5%;
+                bottom: 80px;
+            }
+            #chatbot-toggle-btn {
+                bottom: 20px;
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav id="left-navigation">
+        <h3 class="text-center">Điều hướng</h3>
+        <ul class="nav flex-column nav-list">
+            <li class="nav-item">
+                <a class="nav-link" href="#sensor-metrics">📊 Chỉ số cảm biến</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#charts">📈 Biểu đồ dữ liệu</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#statistics">📊 Thống kê</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#alert-section">⚠️ Cảnh báo lũ</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#alert-history">📜 Lịch sử cảnh báo</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#download-data">📥 Tải dữ liệu</a>
+            </li>
+        </ul>
+    </nav>
+
+    <div id="main-content" class="container text-center">
+        <h1 class="mb-5">🌿 Hệ thống IoT Cảnh báo Lũ sớm</h1>
+
+        <section id="sensor-metrics" class="mb-5">
+            <h4 class="text-start mb-3">Chỉ số cảm biến hiện tại</h4>
+            <div class="row g-4">
+                <div class="col-lg-2 col-md-4 col-6">
+                    <div class="card p-3">
+                        <h5>Độ ẩm đất (%)</h5>
+                        <div class="value" id="SoilMoisture">--</div>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-6">
+                    <div class="card p-3">
+                        <h5>Lưu lượng nước (L/min)</h5>
+                        <div class="value" id="FlowSensor">--</div>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-6">
+                    <div class="card p-3">
+                        <h5>Mực nước (cm)</h5>
+                        <div class="value" id="WaterLevel">--</div>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-6">
+                    <div class="card p-3">
+                        <h5>Nhiệt độ (°C)</h5>
+                        <div class="value" id="Temp">--</div>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-6">
+                    <div class="card p-3">
+                        <h5>Độ ẩm không khí (%)</h5>
+                        <div class="value" id="Humidity">--</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="charts" class="mb-5">
+            <h4 class="text-start mb-3">Biểu đồ dữ liệu</h4>
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="card p-4">
+                        <h4 class="mb-3">📈 Độ ẩm đất</h4>
+                        <div class="chart-container">
+                            <canvas id="chart1"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card p-4">
+                        <h4 class="mb-3">📈 Lưu lượng nước</h4>
+                        <div class="chart-container">
+                            <canvas id="chart2"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card p-4">
+                        <h4 class="mb-3">📈 Mực nước</h4>
+                        <div class="chart-container">
+                            <canvas id="chart3"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card p-4">
+                        <h4 class="mb-3">📈 Nhiệt độ & Độ ẩm</h4>
+                        <div class="chart-container">
+                            <canvas id="chart4"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="statistics" class="mb-5">
+            <h4 class="text-start mb-3">📊 Thống kê dữ liệu (24 giờ qua)</h4>
+            <div class="card p-4">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <h5>Độ ẩm đất (%)</h5>
+                        <p>Trung bình: <span id="soilMoistureAvg">--</span></p>
+                        <p>Tối đa: <span id="soilMoistureMax">--</span></p>
+                        <p>Tối thiểu: <span id="soilMoistureMin">--</span></p>
+                    </div>
+                    <div class="col-md-4">
+                        <h5>Lưu lượng nước (L/min)</h5>
+                        <p>Trung bình: <span id="flowSensorAvg">--</span></p>
+                        <p>Tối đa: <span id="flowSensorMax">--</span></p>
+                        <p>Tối thiểu: <span id="flowSensorMin">--</span></p>
+                    </div>
+                    <div class="col-md-4">
+                        <h5>Mực nước (cm)</h5>
+                        <p>Trung bình: <span id="waterLevelAvg">--</span></p>
+                        <p>Tối đa: <span id="waterLevelMax">--</span></p>
+                        <p>Tối thiểu: <span id="waterLevelMin">--</span></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="alert-section" class="mb-5">
+            <h4 class="text-start mb-3">⚠️ Cảnh báo lũ</h4>
+            <div class="card p-4">
+                <div id="alertMessage" class="h5">Không có cảnh báo</div>
+                <div class="mt-3">
+                    <div class="slider-container">
+                        <div class="slider-label">Ngưỡng độ ẩm đất (%)</div>
+                        <input type="range" id="soilMoistureThreshold" min="0" max="100" value="80" oninput="updateThreshold('soilMoistureThreshold', 'soilMoistureValue', '%')">
+                        <span class="slider-value" id="soilMoistureValue">80%</span>
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">Ngưỡng lưu lượng nước (L/min)</div>
+                        <input type="range" id="flowSensorThreshold" min="0" max="200" value="100" oninput="updateThreshold('flowSensorThreshold', 'flowSensorValue', ' L/min')">
+                        <span class="slider-value" id="flowSensorValue">100 L/min</span>
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">Ngưỡng mực nước (cm)</div>
+                        <input type="range" id="waterLevelThreshold" min="0" max="150" value="70" oninput="updateThreshold('waterLevelThreshold', 'waterLevelValue', ' cm')">
+                        <span class="slider-value" id="waterLevelValue">70 cm</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="alert-history" class="mb-5">
+            <h4 class="text-start mb-3">📜 Lịch sử cảnh báo</h4>
+            <div class="card p-4">
+                <div class="table-container">
+                    <table class="table table-dark table-striped">
+                        <thead>
+                            <tr>
+                                <th>Thời gian</th>
+                                <th>Mức độ</th>
+                                <th>Chi tiết</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertHistoryTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="download-data" class="mb-5">
+            <h4 class="text-start mb-3">📥 Tải dữ liệu</h4>
+            <div class="card p-4">
+                <button class="btn btn-custom" onclick="downloadCSV()">Tải CSV</button>
+            </div>
+        </section>
+
+        <footer>
+            Tạo bởi Team 🚀 | Cung cấp bởi Firebase & Chart.js
+        </footer>
+    </div>
+
+    <button id="chatbot-toggle-btn">🤖</button>
+
+    <div id="chatbot-container">
+        <div id="chatbot-header">
+            <span>Chatbot Nhóm 26</span>
+            <button id="chatbot-close-btn">&times;</button>
+        </div>
+        <div id="chatbot-messages">
+            <div class="chatbot-message bot">Chào bạn! Tôi là FloodSense AI. Tôi có thể giúp bạn hiểu dữ liệu cảm biến và cảnh báo lũ. Bạn muốn hỏi gì?</div>
+            <div class="quick-actions">
+                <button class="quick-action-btn" onclick="sendQuickAction('Chỉ số hiện tại')">Chỉ số hiện tại</button>
+                <button class="quick-action-btn" onclick="sendQuickAction('Tình trạng cảnh báo')">Tình trạng cảnh báo</button>
+                <button class="quick-action-btn" onclick="sendQuickAction('Thống kê 24h')">Thống kê 24h</button>
+                <button class="quick-action-btn" onclick="sendQuickAction('Ngưỡng cảnh báo')">Ngưỡng cảnh báo</button>
+            </div>
+        </div>
+        <div id="chatbot-input-container">
+            <input type="text" id="chatbot-input" placeholder="Nhập tin nhắn của bạn...">
+            <button id="chatbot-send-btn">Gửi</button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Config
+        var firebaseConfig = {
+            apiKey: "AIzaSyBzpil9zIPWRLNSk6SFZVmXccjWB39aYOo",
+            authDomain: "iot-flood-fb00e.firebaseapp.com",
+            databaseURL: "https://iot-flood-fb00e-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "iot-flood-fb00e",
+            storageBucket: "iot-flood-fb00e.appspot.com",
+            messagingSenderId: "100697348036",
+            appId: "1:100697348036:web:21ae4eaee93c84a2e13691",
+            measurementId: "G-QLNQ6WRGEZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+        var messaging = firebase.messaging();
+
+        // Request Notification Permission
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                messaging.getToken({ vapidKey: 'BGQyQ6w...' }).then(token => { // Replace with your actual VAPID key
+                    console.log('FCM Token:', token);
+                }).catch(err => console.error('FCM Token Error:', err));
+            }
+        });
+
+        // Data Storage
+        const labels = [];
+        const maxPoints = 20; // Number of data points to display on charts
+        const sensorData = {
+            SoilMoisture: [],
+            FlowSensor: [],
+            WaterLevel: [],
+            Temp: [],
+            Humidity: []
+        };
+        
+        let lastAlert = {
+            level: 'None',
+            timestamp: 0,
+            details: ''
+        }; // To prevent duplicate pop-ups and chatbot messages
+
+        // Store last known sensor values for anomaly detection
+        const lastSensorValues = {
+            SoilMoisture: null,
+            FlowSensor: null,
+            WaterLevel: null,
+            Temp: null,
+            Humidity: null
+        };
+
+        // Chart Configurations (remains mostly the same)
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 500,
+                easing: 'easeOutQuart'
+            },
+            scales: {
+                x: { 
+                    display: true, // Display x-axis labels
+                    ticks: {
+                        color: '#e0e0e0',
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: { 
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#e0e0e0'
+                    }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#e0e0e0', font: { size: 12 } } }
+            }
+        };
+
+        const chart1 = new Chart(document.getElementById('chart1').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Độ ẩm đất', borderColor: '#ff6384', data: [], fill: false }
+                ]
+            },
+            options: chartOptions
+        });
+
+        const chart2 = new Chart(document.getElementById('chart2').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Lưu lượng nước', borderColor: '#36a2eb', data: [], fill: false }
+                ]
+            },
+            options: chartOptions
+        });
+
+        const chart3 = new Chart(document.getElementById('chart3').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Mực nước', borderColor: '#ff9f40', data: [], fill: false }
+                ]
+            },
+            options: chartOptions
+        });
+
+        const chart4 = new Chart(document.getElementById('chart4').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Nhiệt độ', borderColor: '#4bc0c0', data: [], fill: false },
+                    { label: 'Độ ẩm', borderColor: '#9966ff', data: [], fill: false }
+                ]
+            },
+            options: chartOptions
+        });
+
+        function animateValue(id, newValue) {
+            const el = document.getElementById(id);
+            el.classList.add('updated');
+            el.innerText = newValue.toFixed(1);
+            setTimeout(() => el.classList.remove('updated'), 500);
+        }
+
+        function updateThreshold(sliderId, valueId, unit) {
+            const slider = document.getElementById(sliderId);
+            const valueEl = document.getElementById(valueId);
+            const newValue = parseFloat(slider.value);
+            valueEl.innerText = newValue + unit;
+
+            // Save threshold to Firebase
+            const thresholdKey = sliderId.replace('Threshold', ''); // e.g., 'soilMoistureThreshold' -> 'SoilMoisture'
+            database.ref('Thresholds/' + thresholdKey).set(newValue);
+
+            // Re-check alert status with new thresholds
+            checkFloodAlert(); 
+        }
+
+        function loadThresholds() {
+            const thresholds = [
+                { ref: 'SoilMoisture', sliderId: 'soilMoistureThreshold', valueId: 'soilMoistureValue', unit: '%', defaultValue: 80 },
+                { ref: 'FlowSensor', sliderId: 'flowSensorThreshold', valueId: 'flowSensorValue', unit: ' L/min', defaultValue: 100 },
+                { ref: 'WaterLevel', sliderId: 'waterLevelThreshold', valueId: 'waterLevelValue', unit: ' cm', defaultValue: 70 }
+            ];
+
+            thresholds.forEach(({ ref, sliderId, valueId, unit, defaultValue }) => {
+                database.ref('Thresholds/' + ref).on('value', snapshot => {
+                    const value = snapshot.val() !== null ? snapshot.val() : defaultValue;
+                    const slider = document.getElementById(sliderId);
+                    const valueEl = document.getElementById(valueId);
+                    slider.value = value;
+                    valueEl.innerText = value + unit;
+                    checkFloodAlert(); // Check alert status whenever thresholds change
+                });
+            });
+        }
+
+        function updateCharts() {
+            chart1.data.labels = labels;
+            chart1.data.datasets[0].data = sensorData.SoilMoisture;
+            chart1.update();
+
+            chart2.data.labels = labels;
+            chart2.data.datasets[0].data = sensorData.FlowSensor;
+            chart2.update();
+
+            chart3.data.labels = labels;
+            chart3.data.datasets[0].data = sensorData.WaterLevel;
+            chart3.update();
+
+            chart4.data.labels = labels;
+            chart4.data.datasets[0].data = sensorData.Temp;
+            chart4.data.datasets[1].data = sensorData.Humidity;
+            chart4.update();
+        }
+
+        function fetchAndUpdate(refPath, elementId) {
+            database.ref(refPath).on('value', function(snapshot) {
+                const val = snapshot.val();
+                if (val === null) return;
+
+                animateValue(elementId, val);
+
+                const currentTime = new Date().toLocaleTimeString();
+
+                // Check for anomalies before updating data arrays
+                checkForAnomaly(refPath, val);
+
+                // Ensure all charts have the same number of data points and labels
+                if (labels.length >= maxPoints) {
+                    labels.shift();
+                    for (const key in sensorData) {
+                        if (sensorData[key].length > 0) {
+                            sensorData[key].shift();
+                        }
+                    }
+                }
+                labels.push(currentTime);
+                
+                // Add new data for the current sensor
+                sensorData[refPath].push(val);
+
+                // For other sensors, if they haven't updated, add a placeholder or the last known value
+                for (const key in sensorData) {
+                    if (key !== refPath && sensorData[key].length < labels.length) {
+                        sensorData[key].push(sensorData[key].length > 0 ? sensorData[key][sensorData[key].length - 1] : sensorData[key][sensorData[key].length - 1] || 0); // Add last known value or 0
+                    }
+                }
+
+                updateCharts();
+                checkFloodAlert();
+
+                // Update last known sensor value
+                lastSensorValues[refPath] = val;
+            });
+        }
+
+        function checkForAnomaly(sensorName, currentValue) {
+            if (lastSensorValues[sensorName] !== null) {
+                const previousValue = lastSensorValues[sensorName];
+                // Avoid division by zero if previousValue is 0
+                const percentageChange = previousValue !== 0 ? Math.abs((currentValue - previousValue) / previousValue) * 100 : (currentValue !== 0 ? 100 : 0);
+                
+                // Define a threshold for "sudden change" (e.g., 20% change)
+                const suddenChangeThreshold = 20; // percent
+
+                if (percentageChange > suddenChangeThreshold) {
+                    const anomalyMessage = `**Cảnh báo bất thường:** Giá trị **${getSensorNameVietnamese(sensorName)}** đã thay đổi đột ngột từ **${previousValue.toFixed(1)}** sang **${currentValue.toFixed(1)}** (${percentageChange.toFixed(1)}%). Vui lòng kiểm tra cảm biến!`;
+                    addChatbotMessage(anomalyMessage, 'bot');
+                }
+            }
+        }
+
+        function getSensorNameVietnamese(englishName) {
+            switch(englishName) {
+                case 'SoilMoisture': return 'Độ ẩm đất';
+                case 'FlowSensor': return 'Lưu lượng nước';
+                case 'WaterLevel': return 'Mực nước';
+                case 'Temp': return 'Nhiệt độ';
+                case 'Humidity': return 'Độ ẩm không khí';
+                default: return englishName;
+            }
+        }
+
+        function checkFloodAlert() {
+            const waterLevel = parseFloat(document.getElementById('WaterLevel').innerText) || 0;
+            const flowSensor = parseFloat(document.getElementById('FlowSensor').innerText) || 0;
+            const soilMoisture = parseFloat(document.getElementById('SoilMoisture').innerText) || 0;
+            
+            // Get current thresholds from sliders
+            const waterLevelThreshold = parseFloat(document.getElementById('waterLevelThreshold').value);
+            const flowSensorThreshold = parseFloat(document.getElementById('flowSensorThreshold').value);
+            const soilMoistureThreshold = parseFloat(document.getElementById('soilMoistureThreshold').value);
+            
+            const alertEl = document.getElementById('alertMessage');
+
+            let alertLevel = 'Không có cảnh báo';
+            let alertColor = 'var(--success-color)';
+            let alertBg = 'transparent';
+            let alertDetails = [];
+
+            // Multi-level alert logic based on current sensor values and dynamic thresholds
+            let isAlerting = false;
+            
+            if (soilMoisture > soilMoistureThreshold) {
+                isAlerting = true;
+                alertDetails.push(`Độ ẩm đất: ${soilMoisture.toFixed(1)}% (Ngưỡng: ${soilMoistureThreshold}%)`);
+            }
+            if (flowSensor > flowSensorThreshold) {
+                isAlerting = true;
+                alertDetails.push(`Lưu lượng nước: ${flowSensor.toFixed(1)} L/min (Ngưỡng: ${flowSensorThreshold} L/min)`);
+            }
+            if (waterLevel > waterLevelThreshold) {
+                isAlerting = true;
+                alertDetails.push(`Mực nước: ${waterLevel.toFixed(1)} cm (Ngưỡng: ${waterLevelThreshold} cm)`);
+            }
+
+            if (isAlerting) {
+                // Determine alert level
+                let highAlertTrigger = false;
+                if (soilMoisture > soilMoistureThreshold + 15 || flowSensor > flowSensorThreshold + 50 || waterLevel > waterLevelThreshold + 40) {
+                    highAlertTrigger = true;
+                }
+
+                let mediumAlertTrigger = false;
+                if (!highAlertTrigger && (soilMoisture > soilMoistureThreshold + 10 || flowSensor > flowSensorThreshold + 20 || waterLevel > waterLevelThreshold + 20)) {
+                    mediumAlertTrigger = true;
+                }
+
+                if (highAlertTrigger) {
+                    alertLevel = 'Cao';
+                    alertColor = 'var(--alert-high)';
+                    alertBg = 'rgba(255, 76, 76, 0.2)';
+                } else if (mediumAlertTrigger) {
+                    alertLevel = 'Trung bình';
+                    alertColor = 'var(--alert-medium)';
+                    alertBg = 'rgba(255, 152, 0, 0.2)';
+                } else {
+                    alertLevel = 'Thấp';
+                    alertColor = 'var(--alert-low)';
+                    alertBg = 'rgba(255, 235, 59, 0.2)';
+                }
+
+                const currentAlertDetails = alertDetails.join('; ');
+                alertEl.innerText = `⚠️ Nguy cơ lũ - Mức ${alertLevel}: ${currentAlertDetails}`;
+                alertEl.style.color = alertColor;
+                alertEl.style.background = alertBg;
+
+                const currentTime = Date.now();
+                // Check if this alert is different from the last one or if enough time has passed (5 minutes cooldown)
+                if (alertLevel !== lastAlert.level || currentAlertDetails !== lastAlert.details || (currentTime - lastAlert.timestamp > 300000)) { 
+                    // Save alert to Firebase
+                    const alertData = {
+                        timestamp: new Date().toISOString(),
+                        level: alertLevel,
+                        details: currentAlertDetails
+                    };
+                    database.ref('Alerts').push(alertData); // Use push to generate unique key
+
+                    // Show pop-up notification
+                    if (Notification.permission === 'granted') {
+                        new Notification('Cảnh báo lũ lụt', {
+                            body: `Mức ${alertLevel}: ${currentAlertDetails}`,
+                            icon: 'https://via.placeholder.com/64' // Replace with your actual icon
+                        });
+                    }
+
+                    // Send chatbot message for new alert
+                    addChatbotMessage(`**Cảnh báo lũ mới - Mức ${alertLevel}:** ${currentAlertDetails}`, 'bot');
+                    
+                    lastAlert.level = alertLevel;
+                    lastAlert.details = currentAlertDetails;
+                    lastAlert.timestamp = currentTime;
+                }
+            } else {
+                alertEl.innerText = 'Không có cảnh báo';
+                alertEl.style.color = alertColor;
+                alertEl.style.background = alertBg;
+                lastAlert.level = 'None'; // Reset alert level when no alert
+                lastAlert.details = '';
+            }
+        }
+
+        function saveDataToFirebase() {
+            const timestamp = new Date().toISOString();
+            const data = {
+                SoilMoisture: parseFloat(document.getElementById('SoilMoisture').innerText) || 0,
+                FlowSensor: parseFloat(document.getElementById('FlowSensor').innerText) || 0,
+                WaterLevel: parseFloat(document.getElementById('WaterLevel').innerText) || 0,
+                Temp: parseFloat(document.getElementById('Temp').innerText) || 0,
+                Humidity: parseFloat(document.getElementById('Humidity').innerText) || 0,
+                Timestamp: timestamp
+            };
+            database.ref('HistoricalData').push(data); // Use push to generate unique key
+        }
+
+        function loadAlertHistory() {
+            database.ref('Alerts').limitToLast(10).on('value', snapshot => {
+                const alerts = snapshot.val();
+                const tableBody = document.getElementById('alertHistoryTable');
+                tableBody.innerHTML = '';
+                if (alerts) {
+                    // Convert object to array, sort by timestamp (newest first), then limit
+                    const sortedAlerts = Object.entries(alerts)
+                        .map(([key, value]) => ({ id: key, ...value }))
+                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                        .slice(0, 10); // Ensure only last 10 are displayed if more exist in Firebase
+
+                    sortedAlerts.forEach(alert => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${new Date(alert.timestamp).toLocaleString()}</td>
+                            <td>${alert.level}</td>
+                            <td>${alert.details}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                }
+            });
+        }
+
+        let latestStatistics = {}; // Store latest statistics for chatbot access
+
+        function loadStatistics() {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            database.ref('HistoricalData').orderByChild('Timestamp').startAt(oneDayAgo).on('value', snapshot => {
+                const data = snapshot.val();
+                if (!data) {
+                    document.getElementById('soilMoistureAvg').innerText = '--';
+                    document.getElementById('soilMoistureMax').innerText = '--';
+                    document.getElementById('soilMoistureMin').innerText = '--';
+                    document.getElementById('flowSensorAvg').innerText = '--';
+                    document.getElementById('flowSensorMax').innerText = '--';
+                    document.getElementById('flowSensorMin').innerText = '--';
+                    document.getElementById('waterLevelAvg').innerText = '--';
+                    document.getElementById('waterLevelMax').innerText = '--';
+                    document.getElementById('waterLevelMin').innerText = '--';
+                    
+                    latestStatistics = {}; // Clear stats if no data
+                    return;
+                }
+
+                const values = {
+                    SoilMoisture: [],
+                    FlowSensor: [],
+                    WaterLevel: [],
+                    Temp: [],
+                    Humidity: []
+                };
+
+                Object.values(data).forEach(entry => {
+                    if (entry.SoilMoisture !== undefined && typeof entry.SoilMoisture === 'number') values.SoilMoisture.push(entry.SoilMoisture);
+                    if (entry.FlowSensor !== undefined && typeof entry.FlowSensor === 'number') values.FlowSensor.push(entry.FlowSensor);
+                    if (entry.WaterLevel !== undefined && typeof entry.WaterLevel === 'number') values.WaterLevel.push(entry.WaterLevel);
+                    if (entry.Temp !== undefined && typeof entry.Temp === 'number') values.Temp.push(entry.Temp);
+                    if (entry.Humidity !== undefined && typeof entry.Humidity === 'number') values.Humidity.push(entry.Humidity);
+                });
+
+                const calculateStats = (arr) => ({
+                    avg: arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : '--',
+                    max: arr.length ? Math.max(...arr).toFixed(1) : '--',
+                    min: arr.length ? Math.min(...arr).toFixed(1) : '--'
+                });
+
+                const soilMoistureStats = calculateStats(values.SoilMoisture);
+                const flowSensorStats = calculateStats(values.FlowSensor);
+                const waterLevelStats = calculateStats(values.WaterLevel);
+                const tempStats = calculateStats(values.Temp);
+                const humidityStats = calculateStats(values.Humidity);
+
+
+                document.getElementById('soilMoistureAvg').innerText = soilMoistureStats.avg;
+                document.getElementById('soilMoistureMax').innerText = soilMoistureStats.max;
+                document.getElementById('soilMoistureMin').innerText = soilMoistureStats.min;
+
+                document.getElementById('flowSensorAvg').innerText = flowSensorStats.avg;
+                document.getElementById('flowSensorMax').innerText = flowSensorStats.max;
+                document.getElementById('flowSensorMin').innerText = flowSensorStats.min;
+
+                document.getElementById('waterLevelAvg').innerText = waterLevelStats.avg;
+                document.getElementById('waterLevelMax').innerText = waterLevelStats.max;
+                document.getElementById('waterLevelMin').innerText = waterLevelStats.min;
+
+                // Store for chatbot
+                latestStatistics = {
+                    SoilMoisture: soilMoistureStats,
+                    FlowSensor: flowSensorStats,
+                    WaterLevel: waterLevelStats,
+                    Temp: tempStats,
+                    Humidity: humidityStats
+                };
+            });
+        }
+
+        function downloadCSV() {
+            let csvContent = 'Time,SoilMoisture,FlowSensor,WaterLevel,Temperature,Humidity\n';
+            for (let i = 0; i < labels.length; i++) {
+                csvContent += `${labels[i]},${sensorData.SoilMoisture[i] || ''},${sensorData.FlowSensor[i] || ''},${sensorData.WaterLevel[i] || ''},${sensorData.Temp[i] || ''},${sensorData.Humidity[i] || ''}\n`;
+            }
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'sensor_data.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- Chatbot Logic ---
+        const chatbotToggleBtn = document.getElementById('chatbot-toggle-btn');
+        const chatbotContainer = document.getElementById('chatbot-container');
+        const chatbotCloseBtn = document.getElementById('chatbot-close-btn');
+        const chatbotMessages = document.getElementById('chatbot-messages');
+        const chatbotInput = document.getElementById('chatbot-input');
+        const chatbotSendBtn = document.getElementById('chatbot-send-btn');
+
+        chatbotToggleBtn.addEventListener('click', () => {
+            chatbotContainer.classList.toggle('open');
+        });
+
+        chatbotCloseBtn.addEventListener('click', () => {
+            chatbotContainer.classList.remove('open');
+        });
+
+        chatbotSendBtn.addEventListener('click', sendMessage);
+        chatbotInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function addChatbotMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chatbot-message', sender);
+            messageDiv.innerHTML = text; // Use innerHTML to allow for bold text etc.
+            chatbotMessages.appendChild(messageDiv);
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight; // Auto-scroll to bottom
+        }
+
+        function showTypingIndicator() {
+            const typingIndicator = document.createElement('div');
+            typingIndicator.classList.add('chatbot-message', 'bot', 'typing');
+            typingIndicator.innerText = 'FloodSense AI đang nhập...';
+            chatbotMessages.appendChild(typingIndicator);
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+            return typingIndicator;
+        }
+
+        function removeTypingIndicator(indicator) {
+            if (indicator && indicator.parentNode) {
+                indicator.parentNode.removeChild(indicator);
+            }
+        }
+
+        function sendMessage() {
+            const message = chatbotInput.value.trim();
+            if (message) {
+                addChatbotMessage(message, 'user');
+                chatbotInput.value = ''; // Clear input immediately
+                const typingIndicator = showTypingIndicator(); // Show typing indicator
+                setTimeout(() => {
+                    processChatbotQuery(message);
+                    removeTypingIndicator(typingIndicator); // Remove indicator after processing
+                }, 1000); // Simulate network/processing delay
+            }
+        }
+
+        // Function for quick action buttons
+        function sendQuickAction(action) {
+            chatbotInput.value = action; // Set the input value to the action
+            sendMessage(); // Send the message
+        }
+
+        async function processChatbotQuery(query) {
+            query = query.toLowerCase();
+            let botResponse = "";
+
+            if (query.includes('chào') || query.includes('hello') || query === 'hi') {
+                botResponse = "Chào bạn! Tôi là **FloodSense AI**. Tôi có thể giúp gì cho bạn hôm nay?\n\nBạn có thể hỏi về các chỉ số cảm biến hiện tại, tình trạng cảnh báo, hoặc thống kê dữ liệu 24 giờ qua.";
+            } else if (query.includes('chỉ số hiện tại') || query.includes('giá trị hiện tại')) {
+                const soilMoisture = parseFloat(document.getElementById('SoilMoisture').innerText) || 'Không có dữ liệu';
+                const flowSensor = parseFloat(document.getElementById('FlowSensor').innerText) || 'Không có dữ liệu';
+                const waterLevel = parseFloat(document.getElementById('WaterLevel').innerText) || 'Không có dữ liệu';
+                const temp = parseFloat(document.getElementById('Temp').innerText) || 'Không có dữ liệu';
+                const humidity = parseFloat(document.getElementById('Humidity').innerText) || 'Không có dữ liệu';
+
+                botResponse = `Đây là các chỉ số cảm biến hiện tại:\n` +
+                              `- **Độ ẩm đất:** ${soilMoisture}% \n` +
+                              `- **Lưu lượng nước:** ${flowSensor} L/min\n` +
+                              `- **Mực nước:** ${waterLevel} cm\n` +
+                              `- **Nhiệt độ:** ${temp}°C\n` +
+                              `- **Độ ẩm không khí:** ${humidity}%`;
+            } else if (query.includes('độ ẩm đất')) {
+                const currentSoilMoisture = parseFloat(document.getElementById('SoilMoisture').innerText) || 'Không có dữ liệu';
+                const threshold = parseFloat(document.getElementById('soilMoistureThreshold').value) || 'Không có dữ liệu';
+                botResponse = `**Độ ẩm đất** hiện tại là **${currentSoilMoisture}%**. Ngưỡng cảnh báo là **${threshold}%**.`;
+            } else if (query.includes('lưu lượng nước')) {
+                const currentFlowSensor = parseFloat(document.getElementById('FlowSensor').innerText) || 'Không có dữ liệu';
+                const threshold = parseFloat(document.getElementById('flowSensorThreshold').value) || 'Không có dữ liệu';
+                botResponse = `**Lưu lượng nước** hiện tại là **${currentFlowSensor} L/min**. Ngưỡng cảnh báo là **${threshold} L/min**.`;
+            } else if (query.includes('mực nước')) {
+                const currentWaterLevel = parseFloat(document.getElementById('WaterLevel').innerText) || 'Không có dữ liệu';
+                const threshold = parseFloat(document.getElementById('waterLevelThreshold').value) || 'Không có dữ liệu';
+                botResponse = `**Mực nước** hiện tại là **${currentWaterLevel} cm**. Ngưỡng cảnh báo là **${threshold} cm**.`;
+            } else if (query.includes('nhiệt độ')) {
+                const currentTemp = parseFloat(document.getElementById('Temp').innerText) || 'Không có dữ liệu';
+                botResponse = `**Nhiệt độ** hiện tại là **${currentTemp}°C**.`;
+            } else if (query.includes('độ ẩm không khí')) {
+                const currentHumidity = parseFloat(document.getElementById('Humidity').innerText) || 'Không có dữ liệu';
+                botResponse = `**Độ ẩm không khí** hiện tại là **${currentHumidity}%**.`;
+            } else if (query.includes('tình trạng cảnh báo') || query.includes('cảnh báo hiện tại')) {
+                const currentAlert = document.getElementById('alertMessage').innerText;
+                if (currentAlert.includes('Không có cảnh báo')) {
+                    botResponse = "**Hiện tại không có cảnh báo lũ lụt.** Các chỉ số đang trong ngưỡng an toàn.";
+                } else {
+                    botResponse = `**Tình trạng cảnh báo hiện tại:** ${currentAlert}. Vui lòng xem xét các biện pháp phòng ngừa.`;
+                }
+            } else if (query.includes('thống kê 24h') || query.includes('thống kê dữ liệu') || query.includes('dữ liệu 24 giờ')) {
+                if (Object.keys(latestStatistics).length === 0) {
+                    botResponse = "Hiện không có đủ dữ liệu thống kê trong 24 giờ qua. Vui lòng thử lại sau.";
+                } else {
+                    botResponse = `**Dữ liệu thống kê 24 giờ qua:**\n` +
+                                  `- **Độ ẩm đất:** TB ${latestStatistics.SoilMoisture.avg}%, Max ${latestStatistics.SoilMoisture.max}%, Min ${latestStatistics.SoilMoisture.min}%\n` +
+                                  `- **Lưu lượng nước:** TB ${latestStatistics.FlowSensor.avg} L/min, Max ${latestStatistics.FlowSensor.max} L/min, Min ${latestStatistics.FlowSensor.min} L/min\n` +
+                                  `- **Mực nước:** TB ${latestStatistics.WaterLevel.avg} cm, Max ${latestStatistics.WaterLevel.max} cm, Min ${latestStatistics.WaterLevel.min} cm\n` +
+                                  `- **Nhiệt độ:** TB ${latestStatistics.Temp.avg}°C, Max ${latestStatistics.Temp.max}°C, Min ${latestStatistics.Temp.min}°C\n` +
+                                  `- **Độ ẩm không khí:** TB ${latestStatistics.Humidity.avg}%, Max ${latestStatistics.Humidity.max}%, Min ${latestStatistics.Humidity.min}%`;
+                }
+            } else if (query.includes('ngưỡng cảnh báo')) {
+                const waterLevelThreshold = parseFloat(document.getElementById('waterLevelThreshold').value);
+                const flowSensorThreshold = parseFloat(document.getElementById('flowSensorThreshold').value);
+                const soilMoistureThreshold = parseFloat(document.getElementById('soilMoistureThreshold').value);
+                
+                botResponse = `Các ngưỡng cảnh báo hiện tại được đặt là:\n` +
+                              `- **Độ ẩm đất:** ${soilMoistureThreshold}%\n` +
+                              `- **Lưu lượng nước:** ${flowSensorThreshold} L/min\n` +
+                              `- **Mực nước:** ${waterLevelThreshold} cm`;
+            } else if (query.includes('lịch sử cảnh báo')) {
+                botResponse = "Bạn có thể xem **lịch sử cảnh báo** gần đây nhất trong phần '📜 Lịch sử cảnh báo' trên bảng điều khiển.";
+            } else if (query.includes('tải dữ liệu')) {
+                botResponse = "Bạn có thể tải xuống dữ liệu cảm biến ở định dạng CSV bằng cách nhấp vào nút 'Tải CSV' trong phần '📥 Tải dữ liệu'.";
+            } else if (query.includes('bất thường') || query.includes('đột ngột')) {
+                botResponse = "Tôi sẽ thông báo cho bạn nếu phát hiện bất kỳ sự thay đổi đột ngột nào trong các chỉ số cảm biến (ví dụ: độ ẩm đất tăng nhanh, mực nước thay đổi đáng kể). Những cảnh báo này sẽ hiển thị trực tiếp trong cuộc trò chuyện.";
+            }
+            else {
+                botResponse = "Xin lỗi, tôi chưa được huấn luyện để trả lời câu hỏi này. Bạn có thể hỏi về:\n" +
+                              "- **Các chỉ số cảm biến hiện tại** (ví dụ: 'độ ẩm đất là bao nhiêu?')\n" +
+                              "- **Tình trạng cảnh báo lũ** (ví dụ: 'tình trạng cảnh báo hiện tại')\n" +
+                              "- **Thống kê dữ liệu 24 giờ qua** (ví dụ: 'thống kê 24h')\n" +
+                              "- **Ngưỡng cảnh báo hiện tại** (ví dụ: 'ngưỡng mực nước')\n" +
+                              "Hoặc bạn có thể sử dụng các nút **Quick Actions** bên dưới!";
+            }
+
+            addChatbotMessage(botResponse, 'bot');
+        }
+
+        // Initialize Firebase Listeners
+        fetchAndUpdate('SoilMoisture', 'SoilMoisture');
+        fetchAndUpdate('FlowSensor', 'FlowSensor');
+        fetchAndUpdate('WaterLevel', 'WaterLevel');
+        fetchAndUpdate('Temp', 'Temp');
+        fetchAndUpdate('Humidity', 'Humidity');
+
+        // Load thresholds from Firebase
+        loadThresholds();
+
+        // Save data every minute
+        setInterval(saveDataToFirebase, 60000);
+
+        // Load alert history and statistics
+        loadAlertHistory();
+        loadStatistics();
+    </script>
+</body>
+</html>
