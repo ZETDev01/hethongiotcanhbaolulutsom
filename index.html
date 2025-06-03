@@ -890,7 +890,7 @@
                 isAlerting = true;
                 alertDetails.push(`Lưu lượng nước: ${flowSensor.toFixed(1)} L/min (Ngưỡng: ${flowSensorThreshold} L/min)`);
             }
-            if (waterLevel > waterLevelThreshold) {
+            if (waterLevel < waterLevelThreshold) {
                 isAlerting = true;
                 alertDetails.push(`Mực nước: ${waterLevel.toFixed(1)} cm (Ngưỡng: ${waterLevelThreshold} cm)`);
             }
